@@ -10,7 +10,7 @@ private:
     std::vector<std::string> criticalSymptoms;
 
 public:
-    // Конструктор - заполняет список симптомов по умолчанию
+    // Конструктор - заполняет список симптомов по умолчанию 
     CriticalSymptomChecker();
 
     // Метод проверки (из интерфейса ISymptomChecker)
