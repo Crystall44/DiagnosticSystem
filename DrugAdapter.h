@@ -17,5 +17,4 @@ public:
 
     std::vector<std::unique_ptr<Disease>> getAllDrugs() const override;
     Disease* findDrugByName(const std::string& name) const override;
-    std::vector<Symptom> getContraindicationsAsSymptoms(const std::string& drugName) const override;
 };

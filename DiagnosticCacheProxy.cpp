@@ -2,15 +2,10 @@
 #include <sstream>
 #include <algorithm>
 
-// Принимает уникальный указатель на движок и максимальный размер кэша
 DiagnosticCacheProxy::DiagnosticCacheProxy(
-    std::unique_ptr<IDiagnosticAlgorithm> algo,
-    DiseaseDirectory* dir,
+    std::unique_ptr<IDiagnosticEngine> engine,
     size_t maxSize
-    //прокси создаёт внутри себя реальный объект
-) : hits(0), misses(0), maxCacheSize(maxSize) {
-    realEngine = new DiagnosticEngine(std::move(algo), dir);
-}
+) : realEngine(std::move(engine)), hits(0), misses(0), maxCacheSize(maxSize) {}
 
 // Диагностика с использованием кэша
 std::unique_ptr<DiagnosisResult> DiagnosticCacheProxy::diagnose(const Appointment* appointment) {

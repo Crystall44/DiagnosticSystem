@@ -19,18 +19,14 @@ struct CacheEntry {
 // Прокси для кэширования результатов диагностики (паттерн Proxy)
 class DiagnosticCacheProxy : public IDiagnosticEngine {
 private:
-    DiagnosticEngine* realEngine;
+    std::unique_ptr<IDiagnosticEngine> realEngine; // принимает любой IDiagnosticEngine
     std::map<std::string, std::unique_ptr<CacheEntry>> cache; // кэш: ключ -> результат
     int hits; // количество попаданий в кэш
     int misses; // количество промахов
     size_t maxCacheSize; // максимальный размер кэша
 
 public:
-    DiagnosticCacheProxy(
-        std::unique_ptr<IDiagnosticAlgorithm> algo,
-        DiseaseDirectory* dir,
-        size_t maxSize = 100
-    );
+    DiagnosticCacheProxy(std::unique_ptr<IDiagnosticEngine> engine, size_t maxSize = 100);
 
     ~DiagnosticCacheProxy() = default;
 

@@ -214,49 +214,42 @@ int main() {
     std::cout << "Сценарий 1: Базовый ФАП (фельдшер-стажёр)\n";
 
     // Реальный движок
-    IDiagnosticEngine* realEngine = new DiagnosticEngine(
+    auto realEngine = std::make_unique<DiagnosticEngine>(
         std::make_unique<SimpleDiagnostic>(0.3f),
         &directory
-    );
+        );
     realEngine->addChecker(std::make_unique<CriticalSymptomChecker>());
 
-    //Прокси создается также
-    IDiagnosticEngine* proxy = new DiagnosticCacheProxy(
-        std::make_unique<SimpleDiagnostic>(0.3f),  // те же параметры
-        &directory,
-        100  // дополнительный параметр для размера кэша
-    );
-    proxy->addChecker(std::make_unique<CriticalSymptomChecker>());  // так же добавляем проверки
+    // Создаём прокси, передавая реальный движок
+    DiagnosticCacheProxy proxy(std::move(realEngine), 100);
+
+    proxy.addChecker(std::make_unique<CriticalSymptomChecker>());  // так же добавляем проверки
     // Используем оба одинаково
-    // 
+
     // Используем прокси как обычный движок
     auto result1 = realEngine->diagnose(&apt1);
     printDiagnosisResult(result1.get(), "\nПациент Иванов (симптомы ОРВИ)");
 
-    auto result2 = proxy->diagnose(&apt2);
+    auto result2 = proxy.diagnose(&apt2);
     printDiagnosisResult(result2.get(), "\nПациент Петрова (симптомы ангины)");
 
     // Сценарий 2: Опытный фельдшер 
     std::cout << "\nСценарий 2: Опытный фельдшер\n";
 
-    IDiagnosticEngine* proxy1 = new DiagnosticCacheProxy(
-        std::make_unique<WeightedDiagnostic>(true),  
-        &directory,
-        100 
-    );
-    proxy1->addChecker(std::make_unique<CriticalSymptomChecker>());
+    DiagnosticCacheProxy proxy1(std::move(realEngine), 100);
+    proxy1.addChecker(std::make_unique<CriticalSymptomChecker>());
     auto epiChecker = std::make_unique<EpidemiologicalChecker>();
     epiChecker->setSeason("winter");
-    proxy1->addChecker(std::move(epiChecker));
+    proxy1.addChecker(std::move(epiChecker));
 
     // Диагностика третьего пациента (грипп)
-    auto result3 = proxy1->diagnose(&apt3);
+    auto result3 = proxy1.diagnose(&apt3);
     printDiagnosisResult(result3.get(), "\nПациент Сидоров (симптомы гриппа)");
 
     // Демонстрация работы прокси (кэша)
     // Повторная диагностика с теми же симптомами (должно быть попадание в кэш)
     std::cout << "\nПовторная диагностика пациента Иванов (те же симптомы)...\n";
-    auto resultCached = proxy->diagnose(&apt1);  // apt1 - это Иванов с симптомами ОРВИ
+    auto resultCached = proxy.diagnose(&apt1);  // apt1 - это Иванов с симптомами ОРВИ
     printDiagnosisResult(resultCached.get(), "Повторно (из кэша)");
 
     // Сценарий 3: Консультация в ЦРБ 
@@ -296,6 +289,9 @@ int main() {
     intoxicationGroup->addSymptom(Symptom("слабость", "общая слабость", 5));
     intoxicationGroup->addSymptom(Symptom("головная боль", "пульсирующая", 4));
 
+    // Вкладываем одну группу в другую
+    respiratoryGroup->add(std::move(intoxicationGroup));
+
     std::cout << "\nСтруктура групп симптомов:\n";
     std::cout << "Респираторные симптомы:\n";
     for (const auto& sym : respiratoryGroup->getAllSymptoms()) {
@@ -306,19 +302,10 @@ int main() {
         std::cout << "  " << sym << "\n";
     }
 
-    auto allSymptoms = std::make_unique<SymptomGroup>("Все симптомы");
-    allSymptoms->add(std::move(respiratoryGroup));
-    allSymptoms->add(std::move(intoxicationGroup));
-
-    std::cout << "Группа 'Все симптомы' содержит:\n";
-    for (const auto& sym : allSymptoms->getAllSymptoms()) {
-        std::cout << "  - " << sym << "\n";
-    }
-
     // 2. Демонстрация Iterator
     std::cout << "\n2. Iterator: обход симптомов через итератор\n";
     Appointment demoApp(patient1.get());
-    demoApp.setSymptomGroup(allSymptoms.get(), false); 
+    demoApp.setSymptomGroup(respiratoryGroup.get(), false);
 
     SymptomsIterator* it = demoApp.createIterator();
     std::cout << "Симптомы через итератор:\n";
@@ -329,7 +316,7 @@ int main() {
 
     // 3. DECORATOR — два декоратора, один оборачивает другой
     std::cout << "\n3. Decorator: форматирование отчёта в Markdown\n";
-    auto diagnosis = proxy1->diagnose(&demoApp);
+    auto diagnosis = proxy1.diagnose(&demoApp);
 
     // Создаём базовый отчёт (DiagnosisResult)
     auto baseReport = std::make_unique<DiagnosisResult>(*diagnosis);
@@ -349,10 +336,10 @@ int main() {
     // 4. ADAPTER — преобразует LegacyDrugDB в IDrugSource (возвращает Disease)
     std::cout << "\n4. Adapter: интеграция с внешней системой лекарств\n";
     LegacyDrugDB legacyDB;
-    DrugAdapter drugAdapter(&legacyDB);
+    IDrugSource* drugAdapter = new DrugAdapter(&legacyDB);
 
     // Получаем все лекарства как заболевания
-    auto drugs = drugAdapter.getAllDrugs();
+    std::vector<std::unique_ptr<Disease>> drugs = drugAdapter->getAllDrugs();
     std::cout << "Лекарства из внешней системы (как Disease):\n";
     for (const auto& drug : drugs) {
         std::cout << "  - " << drug->getName() << " (код: " << drug->getIcd10Code() << ")\n";
@@ -368,7 +355,7 @@ int main() {
 
     // Поиск конкретного лекарства
     std::cout << "\nПоиск лекарства 'Аспирин':\n";
-    Disease* aspirin = drugAdapter.findDrugByName("Аспирин");
+    Disease* aspirin = drugAdapter->findDrugByName("Аспирин");
     if (aspirin) {
         std::cout << "  Найдено: " << aspirin->getName() << "\n";
         std::cout << "  Противопоказания: ";
@@ -376,30 +363,6 @@ int main() {
             std::cout << sw.getSymptomName() << " ";
         }
         std::cout << "\n";
-    }
-
-    // Проверка противопоказаний
-    std::cout << "\nПроверка противопоказаний для пациента:\n";
-    auto contraindications = drugAdapter.getContraindicationsAsSymptoms("Аспирин");
-    std::cout << "Противопоказания к Аспирину как симптомы:\n";
-    for (const auto& symptom : contraindications) {
-        std::cout << "  - " << symptom.toString() << "\n";
-    }
-
-    // Проверка аллергии
-    std::cout << "\nПроверка аллергии:\n";
-    bool hasAllergy = false;
-    for (const auto& allergy : patient1->getAllergies()) {
-        for (const auto& contra : contraindications) {
-            if (contra.getName() == allergy) {
-                hasAllergy = true;
-                std::cout << "  ВНИМАНИЕ! У пациента аллергия на " << allergy
-                    << " (противопоказание к Аспирину)\n";
-            }
-        }
-    }
-    if (!hasAllergy) {
-        std::cout << "  Противопоказаний не найдено, Аспирин можно назначать\n";
     }
 
     // Очистка (allSymptoms уже в unique_ptr, удалится автоматически)

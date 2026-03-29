@@ -15,7 +15,4 @@ public:
 
     // Найти лекарство по названию
     virtual Disease* findDrugByName(const std::string& name) const = 0;
-
-    // Получить противопоказания как симптомы
-    virtual std::vector<Symptom> getContraindicationsAsSymptoms(const std::string& drugName) const = 0;
 };

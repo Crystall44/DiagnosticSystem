@@ -41,16 +41,3 @@ Disease* DrugAdapter::findDrugByName(const std::string& name) const {
     }
     return nullptr;
 }
-
-std::vector<Symptom> DrugAdapter::getContraindicationsAsSymptoms(const std::string& drugName) const {
-    std::vector<Symptom> symptoms;
-
-    auto disease = findDrugByName(drugName);
-    if (disease) {
-        for (const auto& sw : disease->getSymptoms()) {
-            symptoms.emplace_back(sw.getSymptomName(), "Противопоказание", 10);
-        }
-    }
-
-    return symptoms;
-}
